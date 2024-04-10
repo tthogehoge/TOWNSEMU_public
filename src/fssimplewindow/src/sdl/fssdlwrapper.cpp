@@ -44,12 +44,8 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <fcntl.h>
 #include <errno.h>
 
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-#include <X11/keysym.h>
-#include <X11/keysymdef.h>
-#include <X11/Xatom.h>
-
+#include <SDL.h>
+#include <SDL_opengl.h>
 #include <GL/gl.h>
 #include <GL/glu.h>
 #include <GL/glx.h>
@@ -81,11 +77,11 @@ static int nCharBufUsed=0;
 static int charBuffer[NKEYBUF];
 static int nMosBufUsed=0;
 static FsMouseEventLog mosBuffer[NKEYBUF];
+static SDL_Event ev_key;
 
 
-
-static Display *ysXDsp;
-static Window ysXWnd;
+static SDL_Window* ysWindow;
+static SDL_GLContext ysContext;
 static Colormap ysXCMap;
 static XVisualInfo *ysXVis;
 static const int ysXEventMask=(KeyPressMask|KeyReleaseMask|ButtonPressMask|ButtonReleaseMask|PointerMotionMask|ExposureMask|StructureNotifyMask);
@@ -105,15 +101,11 @@ static int lastKnownLb=0,lastKnownMb=0,lastKnownRb=0;
 
 
 // For FsGui library tunnel >>
-static long long int clipBoardContentLength=0;
-static char *clipBoardContent=NULL;
 static long long int pastedContentLength=0;
 static char *pastedContent=NULL;
 static void ProcessSelectionRequest(XEvent &evt);
 // For FsGui library tunnel <<
 
-
-static void ForceMoveWindow(Display *dsp,Window &wnd,int x,int y);
 
 void FsOpenWindow(const FsOpenWindowOption &opt)
 {
@@ -127,8 +119,6 @@ void FsOpenWindow(const FsOpenWindowOption &opt)
 
 	int n;
 	char **m,*def;
-	XSetWindowAttributes swa;
-	Font font;
 
 	int lupX,lupY,sizX,sizY;
 	lupX=x0;
@@ -144,188 +134,87 @@ void FsOpenWindow(const FsOpenWindowOption &opt)
 
 	// Apparently XInitThread is requierd even if only one thread is accessing X-Window system, unless that thread is the main thread.
 	// Weird.
-	XInitThreads();
-	ysXDsp=XOpenDisplay(NULL);
-
-	if(ysXDsp!=NULL)
-	{
-		printf("Opened display.\n");
-		if(glXQueryExtension(ysXDsp,NULL,NULL)!=0)
-		{
-			printf("Acquired GLX extension.\n");
-
-			int tryAlternativeSingleBuffer=0;
-			if(useDoubleBuffer!=0)
-			{
-				ysXVis=glXChooseVisual(ysXDsp,DefaultScreen(ysXDsp),ysGlxCfgDouble);
-			}
-			else
-			{
-				ysXVis=glXChooseVisual(ysXDsp,DefaultScreen(ysXDsp),ysGlxCfgSingle);
-				if(NULL==ysXVis)
-				{
-					ysXVis=glXChooseVisual(ysXDsp,DefaultScreen(ysXDsp),ysGlxCfgDouble);
-					tryAlternativeSingleBuffer=1;
-				}
-			}
-
-			printf("Chose visual.\n");
-
-			if(ysXVis!=NULL)
-			{
-				ysXCMap=XCreateColormap(ysXDsp,RootWindow(ysXDsp,ysXVis->screen),ysXVis->visual,AllocNone);
-				printf("Created colormap.\n");
-
-				ysGlRC=glXCreateContext(ysXDsp,ysXVis,None,GL_TRUE);
-				if(ysGlRC!=NULL)
-				{
-					printf("Created OpenGL context.\n");
-
-					swa.colormap=ysXCMap;
-					swa.border_pixel=0;
-					swa.event_mask=ysXEventMask;
-
-					// Memo: lupX and lupY given to XCreateWindow will be ignored.
-					//       Window must be moved to the desired position by XMoveWindow after XMapWindow.
-					ysXWnd=XCreateWindow(ysXDsp,RootWindow(ysXDsp,ysXVis->screen),
-							  lupX,lupY,sizX,sizY,
-					                  1,
-							  ysXVis->depth,
-					                  InputOutput,
-							  ysXVis->visual,
-					                  CWEventMask|CWBorderPixel|CWColormap,&swa);
-
-					printf("Created Window.\n");
-
-					ysXWid=sizX;
-					ysXHei=sizY;
-					ysXlupX=lupX;
-					ysXlupY=lupY;
-
-					XStoreName(ysXDsp,ysXWnd,title);
-
-
-					XWMHints wmHints;
-					wmHints.flags=0;
-					wmHints.initial_state=NormalState;
-					XSetWMHints(ysXDsp,ysXWnd,&wmHints);
-
-
-					XSetIconName(ysXDsp,ysXWnd,title);
-					XMapWindow(ysXDsp,ysXWnd);
-
-					// Memo: XCreateWindow probably ignore lupX and lupY.  Window must be moved here.
-					ForceMoveWindow(ysXDsp,ysXWnd,lupX,lupY);
-					// ForceMoveWindow may have failed to place the window, but let's at least reset lupX and lupY.
-					ysXlupX=lupX;
-					ysXlupY=lupY;
-
-					printf("Zzz...\n");
-					sleep(1);
-					printf("Slept one second.\n");
-
-					if(opt.sizeOpt==FsOpenWindowOption::FULLSCREEN)
-					{
-						FsMakeFullScreen();
-					}
-					else if(opt.sizeOpt==FsOpenWindowOption::MAXIMIZE_WINDOW)
-					{
-						FsMaximizeWindow();
-					}
-
-					/* printf("Wait Expose Event\n");
-					XEvent ev;
-					while(XCheckTypedEvent(ysXDsp,Expose,&ev)!=True)
-					  {
-					    printf("Waiting for create notify\n");
-					    sleep(1);
-					  }
-					printf("Window=%d\n",ev.xexpose.window);
-					printf("Window Created\n"); */
-
-					glXMakeCurrent(ysXDsp,ysXWnd,ysGlRC);
-
-					// These lines are needed, or window will not appear >>
-				    glClearColor(1.0F,1.0F,1.0F,0.0F);
-					glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-					glFlush();
-					// glXSwapBuffers(ysXDsp,ysXWnd);
-					// These lines are needed, or window will not appear <<
-
-					glEnable(GL_DEPTH_TEST);
-					glDepthFunc(GL_LEQUAL);
-					glShadeModel(GL_SMOOTH);
-
-					GLfloat dif[]={0.8F,0.8F,0.8F,1.0F};
-					GLfloat amb[]={0.4F,0.4F,0.4F,1.0F};
-					GLfloat spc[]={0.9F,0.9F,0.9F,1.0F};
-					GLfloat shininess[]={50.0,50.0,50.0,0.0};
-
-					glEnable(GL_LIGHTING);
-					glEnable(GL_LIGHT0);
-					glLightfv(GL_LIGHT0,GL_DIFFUSE,dif);
-					glLightfv(GL_LIGHT0,GL_SPECULAR,spc);
-					glMaterialfv(GL_FRONT|GL_BACK,GL_SHININESS,shininess);
-
-					glLightModelfv(GL_LIGHT_MODEL_AMBIENT,amb);
-					glEnable(GL_COLOR_MATERIAL);
-					glEnable(GL_NORMALIZE);
-
-					if(0!=tryAlternativeSingleBuffer)
-					{
-						glDrawBuffer(GL_FRONT);
-					}
-
-				    glClearColor(1.0F,1.0F,1.0F,0.0F);
-				    glClearDepth(1.0F);
-					glDisable(GL_DEPTH_TEST);
-
-					glViewport(0,0,sizX,sizY);
-
-				    glMatrixMode(GL_PROJECTION);
-					glLoadIdentity();
-					glOrtho(0,(float)sizX-1,(float)sizY-1,0,-1,1);
-
-					glMatrixMode(GL_MODELVIEW);
-					glLoadIdentity();
-
-					glShadeModel(GL_FLAT);
-					glPointSize(1);
-					glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-					glColor3ub(0,0,0);
-
-					if(NULL!=fsOpenGLInitializationCallBack)
-					{
-						(*fsOpenGLInitializationCallBack)(fsOpenGLInitializationCallBackParam);
-					}
-
-					if(NULL!=fsAfterWindowCreationCallBack)
-					{
-						(*fsAfterWindowCreationCallBack)(fsAfterWindowCreationCallBackParam);
-					}
-				}
-				else
-				{
-					fprintf(stderr,"Cannot create OpenGL context.\n");
-					exit(1);
-				}
-			}
-			else
-			{
-				fprintf(stderr,"Double buffer not supported?\n");
-				exit(1);
-			}
-		}
-		else
-		{
-			fprintf(stderr,"This system doesn't support OpenGL.\n");
-			exit(1);
-		}
+	if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS) < 0) {
+		printf("SDL_Init failed.\n");
+		exit(1);
 	}
-	else
-	{
+	printf("SDL_Init OK.\n");
+	if(useDoubleBuffer){
+		SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);
+	}
+	ysWindow = SDL_CreateWindow(title,
+			SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+			wid,hei,
+			SDL_WINDOW_OPENGL);
+	if(ysWindow==NULL){
 		fprintf(stderr,"Cannot Open Display.\n");
 		exit(1);
+	}
+	printf("Opened display.\n");
+	ysContext = SDL_GL_CreateContext(ysWindow);
+	if(ysContext==NULL){
+		fprintf(stderr,"Cannot create OpenGL context.\n");
+		exit(1);
+	}
+	printf("Created OpenGL context.\n");
+
+	// These lines are needed, or window will not appear >>
+	glClearColor(1.0F,1.0F,1.0F,0.0F);
+	glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+	glFlush();
+	// glXSwapBuffers(ysXDsp,ysXWnd);
+	// These lines are needed, or window will not appear <<
+
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LEQUAL);
+	glShadeModel(GL_SMOOTH);
+
+	GLfloat dif[]={0.8F,0.8F,0.8F,1.0F};
+	GLfloat amb[]={0.4F,0.4F,0.4F,1.0F};
+	GLfloat spc[]={0.9F,0.9F,0.9F,1.0F};
+	GLfloat shininess[]={50.0,50.0,50.0,0.0};
+
+	glEnable(GL_LIGHTING);
+	glEnable(GL_LIGHT0);
+	glLightfv(GL_LIGHT0,GL_DIFFUSE,dif);
+	glLightfv(GL_LIGHT0,GL_SPECULAR,spc);
+	glMaterialfv(GL_FRONT|GL_BACK,GL_SHININESS,shininess);
+
+	glLightModelfv(GL_LIGHT_MODEL_AMBIENT,amb);
+	glEnable(GL_COLOR_MATERIAL);
+	glEnable(GL_NORMALIZE);
+
+	if(0!=tryAlternativeSingleBuffer)
+	{
+		glDrawBuffer(GL_FRONT);
+	}
+
+	glClearColor(1.0F,1.0F,1.0F,0.0F);
+	glClearDepth(1.0F);
+	glDisable(GL_DEPTH_TEST);
+
+	glViewport(0,0,sizX,sizY);
+
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrtho(0,(float)sizX-1,(float)sizY-1,0,-1,1);
+
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+
+	glShadeModel(GL_FLAT);
+	glPointSize(1);
+	glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+	glColor3ub(0,0,0);
+
+	if(NULL!=fsOpenGLInitializationCallBack)
+	{
+		(*fsOpenGLInitializationCallBack)(fsOpenGLInitializationCallBackParam);
+	}
+
+	if(NULL!=fsAfterWindowCreationCallBack)
+	{
+		(*fsAfterWindowCreationCallBack)(fsAfterWindowCreationCallBackParam);
 	}
 
 	return;
@@ -333,125 +222,316 @@ void FsOpenWindow(const FsOpenWindowOption &opt)
 
 void FsResizeWindow(int newWid,int newHei)
 {
-	XResizeWindow(ysXDsp,ysXWnd,newWid,newHei);
-	XFlush(ysXDsp);
 }
 
 int FsCheckWindowOpen(void)
 {
-	if(ysXWnd!=NULL)
+	if(ysWindow!=NULL)
 	{
 		return 1;
 	}
 	return 0;
 }
 
-static void ForceMoveWindow(Display *dsp,Window &wnd,int goalX,int goalY)
-{
-	// This function tries to address the inability of X-Window system to place a window at a precise location.
-	// However, the window may still be moved to a random location after this function.
-	// There seems to be no remedy.
-
-	auto timeOut=time(NULL); 
-
-	int tryX=goalX;
-	int tryY=goalY;
-
-	int tryingX=tryX+1;
-	int tryingY=tryY+1;
-
-	// Wait until the second border
-	while(time(NULL)==timeOut)
-	{
-	}
-
-//	timeOut=time(NULL);
-//	while(time(NULL)==timeOut)
-//	{
-//		XEvent ev;
-//		XCheckTypedWindowEvent(dsp,wnd,ConfigureNotify,&ev);
-//	}
-
-	timeOut=time(NULL)+1;
-	while(time(NULL)<timeOut) // Until the window is really located at lupX, lupY
-	{
-		if(tryingX!=tryX || tryingY!=tryY)
-		{
-			XMoveWindow(dsp,wnd,tryX,tryY);
-			tryingX=tryX;
-			tryingY=tryY;
-		}
-
-		XEvent ev;
-		if(XCheckTypedWindowEvent(dsp,wnd,ConfigureNotify,&ev)==True)
-		{
-			const int actualX=ev.xconfigure.x;
-			const int actualY=ev.xconfigure.y;
-
-			printf("%d %d %d %d\n",actualX,actualY,goalX,goalY);
-
-			const int dx=goalX-actualX;
-			const int dy=goalY-actualY;
-
-			if(-1<=dx && dx<=1 && -1<=dy && dy<=1)
-			{
-				break;
-			}
-
-			printf("dx %d dy %d\n",dx,dy);
-			tryX+=dx;
-			tryY+=dy;
-
-			if(0<dx)
-			{
-				++tryX;
-			}
-			else if(0>dx)
-			{
-				--tryX;
-			}
-
-			if(0<dy)
-			{
-				++tryY;
-			}
-			else if(0>dy)
-			{
-				--tryY;
-			}
-		}
-	}
-}
-
 void FsGetWindowSize(int &wid,int &hei)
 {
-	//wid=ysXWid;
-	//hei=ysXHei;
-	Window root_return;
-	int x_return,y_return;
-	unsigned int width_return,height_return;
-	unsigned int border_width_return,depth_return;
-	XGetGeometry(ysXDsp,ysXWnd,&root_return,&x_return,&y_return,&width_return,&height_return,&border_width_return,&depth_return);
-	wid=width_return;
-	hei=height_return;
+	SDL_GetWindowSize(ysWindow, &wid, &hei);
 }
 
 void FsGetWindowPosition(int &x0,int &y0)
 {
-	x0=ysXlupX;
-	y0=ysXlupY;
+	SDL_GetWindowPosition(ysWindow, &x0, &y0);
 }
 
 void FsSetWindowTitle(const char windowTitle[])
 {
-	const int formatSize = 8;
-	XChangeProperty(ysXDsp, ysXWnd,
-		XInternAtom(ysXDsp, "_NET_WM_NAME", False),
-		XInternAtom(ysXDsp, "UTF8_STRING", False),
-		formatSize,
-		PropModeReplace,
-		(unsigned char *) windowTitle,
-		strlen(windowTitle));
+	SDL_SetWindowTitle(ysWindow, windowTitle);
+}
+
+static void execKeyEvent(SDL_Event ev)
+{
+	int i,fsKey,fsKey2;
+	char chr;
+	SDL_Keycode ks;
+	ev_key = ev;
+
+	fsKey=FSKEY_NULL;
+
+	int i;
+	// SDL_Scancode ev.key.keysym.scancode;
+	// SDL_Keycode ev.key.keysym.sym;
+	// SDL_Keymod ev.key.keysym.mod;
+
+	if(0!=(ev.key.keysym.mod&KMOD_CTRL))
+	{
+		chr=0;
+	}
+	else if((ev.key.keysym.mod&KMOD_CAPS)==0 && (ev.key.keysym.mod&KMOD_SHIFT)==0)
+	{
+		chr=FsXKeySymToChar(keySymMap[0]); // mapXKtoChar[keySymMap[0]];
+	}
+	else if((ev.key.keysym.mod&KMOD_CAPS)==0 && (ev.key.keysym.mod&KMOD_SHIFT)!=0)
+	{
+		chr=FsXKeySymToChar(keySymMap[1]); // mapXKtoChar[keySymMap[1]];
+	}
+	else if((ev.key.keysym.mod&KMOD_SHIFT)==0 && (ev.key.keysym.mod&KMOD_CAPS)!=0)
+	{
+		chr=FsXKeySymToChar(keySymMap[0]); // mapXKtoChar[keySymMap[0]];
+		if('a'<=chr && chr<='z')
+		{
+			chr=chr+('A'-'a');
+		}
+	}
+	else if((ev.key.keysym.mod&KMOD_SHIFT)!=0 && (ev.key.keysym.mod&KMOD_CAPS)!=0)
+	{
+		chr=FsXKeySymToChar(keySymMap[1]); // mapXKtoChar[keySymMap[1]];
+		if('a'<=chr && chr<='z')
+		{
+			chr=chr+('A'-'a');
+		}
+	}
+
+	// Memo:
+	// XK code is so badly designed.  XK_KP_Divide, XK_KP_Multiply,
+	// XK_KP_Subtract, XK_KP_Add, should not be altered to
+	// XK_XF86_Next_VMode or like that.  Other XK_KP_ code
+	// can be altered by Mod2Mask.
+
+
+	// following keys should be flipped based on Num Lock mask.  Apparently mod2mask is num lock by standard.
+	// XK_KP_Space
+	// XK_KP_Tab
+	// XK_KP_Enter
+	// XK_KP_F1
+	// XK_KP_F2
+	// XK_KP_F3
+	// XK_KP_F4
+	// XK_KP_Home
+	// XK_KP_Left
+	// XK_KP_Up
+	// XK_KP_Right
+	// XK_KP_Down
+	// XK_KP_Prior
+	// XK_KP_Page_Up
+	// XK_KP_Next
+	// XK_KP_Page_Down
+	// XK_KP_End
+	// XK_KP_Begin
+	// XK_KP_Insert
+	// XK_KP_Delete
+	// XK_KP_Equal
+	// XK_KP_Multiply
+	// XK_KP_Add
+	// XK_KP_Separator
+	// XK_KP_Subtract
+	// XK_KP_Decimal
+	// XK_KP_Divide
+
+	// XK_KP_0
+	// XK_KP_1
+	// XK_KP_2
+	// XK_KP_3
+	// XK_KP_4
+	// XK_KP_5
+	// XK_KP_6
+	// XK_KP_7
+	// XK_KP_8
+	// XK_KP_9
+
+	ks=ev.key.keysym.sym;
+	if(SDLK_a<=ks && ks<=SDLK_z)
+	{
+		ks=ks+SDLK_A-SDLK_a;
+	}
+
+	if(0<=ks && ks<FS_NUM_XK)
+	{
+		fsKey=FsXKeySymToFsInkey(ks); // mapXKtoFSKEY[ks];
+		fsKey2=FsXKeySymToFsGetKeyState(ks);
+
+		// 2005/03/29 >>
+		if(fsKey==0)
+		{
+			SDL_Scancode kcode;
+			kcode=SDL_GetScancodeFromKey(ks);
+			if(kcode!=0)
+			{
+				ks=XKeycodeToKeysym(ysXDsp,kcode,0);
+				if(SDLK_a<=ks && ks<=SDLK_z)
+				{
+					ks=ks+SDLK_A-SDLK_a;
+				}
+
+				if(0<=ks && ks<FS_NUM_XK)
+				{
+					fsKey=FsXKeySymToFsInkey(ks); // mapXKtoFSKEY[ks];
+					fsKey2=FsXKeySymToFsGetKeyState(ks);
+				}
+			}
+		}
+		// 2005/03/29 <<
+
+		if(ev.type==KeyPress && fsKey!=0)
+		{
+			fsKeyPress[fsKey]=1;
+			if(FSKEY_NULL!=fsKey2)
+			{
+				fsKeyPress[fsKey2]=1;
+			}
+			if(ev.xkey.window==ysXWnd) // 2005/04/08
+			{
+				if(nKeyBufUsed<NKEYBUF)
+				{
+					keyBuffer[nKeyBufUsed++]=fsKey;
+				}
+				if(chr!=0 && nCharBufUsed<NKEYBUF)
+				{
+					charBuffer[nCharBufUsed++]=chr;
+				}
+			}
+		}
+		else
+		{
+			fsKeyPress[fsKey]=0;
+			if(FSKEY_NULL!=fsKey2)
+			{
+				fsKeyPress[fsKey2]=0;
+			}
+		}
+	}
+}
+
+static void execMouseButtonEvent(SDL_Event ev)
+{
+	int fsKey=FSKEY_NULL;
+
+	if(SDL_MOUSEBUTTONDOWN==ev.type || SDL_MOUSEBUTTONUP==ev.type)
+	{
+		fsKey=FSKEY_NULL;
+		if(ev.button.button==SDL_BUTTON_X1)
+		{
+			fsKey=FSKEY_WHEELUP;
+		}
+		else if(ev.button.button==SDL_BUTTON_X2)
+		{
+			fsKey=FSKEY_WHEELDOWN;
+		}
+
+		if(FSKEY_NULL!=fsKey)
+		{
+			if(ev.type==SDL_MOUSEBUTTONDOWN)
+			{
+				fsKeyPress[fsKey]=1;
+				if(ev.button.window==ysXWnd)
+				{
+					if(nKeyBufUsed<NKEYBUF)
+					{
+						keyBuffer[nKeyBufUsed++]=fsKey;
+					}
+				}
+
+			}
+			else if(ev.type==SDL_MOUSEBUTTONUP)
+			{
+				fsKeyPress[fsKey]=0;
+			}
+		}
+		else if(NKEYBUF>nMosBufUsed)
+		{
+			mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_NONE;
+			if(ev.type==SDL_MOUSEBUTTONDOWN)
+			{
+				switch(ev.button.button)
+				{
+					case SDL_BUTTON_LEFT:
+						mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_LBUTTONDOWN;
+						lastKnownLb=1;
+						break;
+					case SDL_BUTTON_MIDDLE:
+						mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_MBUTTONDOWN;
+						lastKnownMb=1;
+						break;
+					case SDL_BUTTON_RIGHT:
+						mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_RBUTTONDOWN;
+						lastKnownRb=1;
+						break;
+				}
+			}
+			else if(ev.type==SDL_MOUSEBUTTONUP)
+			{
+				switch(ev.button.button)
+				{
+					case SDL_BUTTON_LEFT:
+						mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_LBUTTONUP;
+						lastKnownLb=0;
+						break;
+					case SDL_BUTTON_MIDDLE:
+						mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_MBUTTONUP;
+						lastKnownMb=0;
+						break;
+					case SDL_BUTTON_RIGHT:
+						mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_RBUTTONUP;
+						lastKnownRb=0;
+						break;
+				}
+			}
+
+			mosBuffer[nMosBufUsed].mx=ev.button.x;
+			mosBuffer[nMosBufUsed].my=ev.button.y;
+			// Turned out these button states are highly unreliable.
+			// It may come with (state&Button1Mask)==0 on ButtonPress event of Button 1.
+			// Confirmed this problem in VirtualBox.  This silly flaw may not occur in 
+			// real environment.
+			// mosBuffer[nMosBufUsed].lb=(0!=(ev.button.state & Button1Mask));
+			// mosBuffer[nMosBufUsed].mb=(0!=(ev.button.state & Button2Mask));
+			// mosBuffer[nMosBufUsed].rb=(0!=(ev.button.state & Button3Mask));
+			mosBuffer[nMosBufUsed].lb=lastKnownLb;
+			mosBuffer[nMosBufUsed].mb=lastKnownMb;
+			mosBuffer[nMosBufUsed].rb=lastKnownRb;
+			mosBuffer[nMosBufUsed].shift=(0!=ev_key.key.keysym.mod & KMOD_SHIFT);
+			mosBuffer[nMosBufUsed].ctrl=(0!=ev_key.key.keysym.mod & KMOD_CTRL);
+
+			nMosBufUsed++;
+		}
+	}
+}
+
+static void execMouseMotionEvent(SDL_Event ev)
+{
+	int mx=ev.button.x;
+	int my=ev.button.y;
+	int lb=lastKnownLb; // XButtonEvent.state turns out to be highly unreliable  (0!=(ev.button.state & Button1Mask));
+	int mb=lastKnownMb; // (0!=(ev.button.state & Button2Mask));
+	int rb=lastKnownRb; // (0!=(ev.button.state & Button3Mask));
+	int shift=(0!=ev_key.key.keysym.mod & KMOD_SHIFT);
+	int ctrl=(0!=ev_key.key.keysym.mod & KMOD_CTRL);
+
+	if(0<nMosBufUsed &&
+			mosBuffer[nMosBufUsed-1].eventType==FSMOUSEEVENT_MOVE &&
+			mosBuffer[nMosBufUsed-1].lb==lb &&
+			mosBuffer[nMosBufUsed-1].mb==mb &&
+			mosBuffer[nMosBufUsed-1].rb==rb &&
+			mosBuffer[nMosBufUsed-1].shift==shift &&
+			mosBuffer[nMosBufUsed-1].ctrl==ctrl)
+	{
+		mosBuffer[nMosBufUsed-1].mx=mx;
+		mosBuffer[nMosBufUsed-1].my=my;
+	}
+
+	if(NKEYBUF>nMosBufUsed)
+	{
+		mosBuffer[nMosBufUsed].mx=mx;
+		mosBuffer[nMosBufUsed].my=my;
+		mosBuffer[nMosBufUsed].lb=lb;
+		mosBuffer[nMosBufUsed].mb=mb;
+		mosBuffer[nMosBufUsed].rb=rb;
+		mosBuffer[nMosBufUsed].shift=shift;
+		mosBuffer[nMosBufUsed].ctrl=ctrl;
+
+		mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_MOVE;
+
+		nMosBufUsed++;
+	}
 }
 
 void FsPollDevice(void)
@@ -461,317 +541,32 @@ void FsPollDevice(void)
 		return;
 	}
 
-	int i,fsKey,fsKey2;
-	char chr;
-	KeySym ks;
-	XEvent ev;
+	SDL_Event e;
 
-	fsKey=FSKEY_NULL;
-
-	while(XCheckWindowEvent(ysXDsp,ysXWnd,KeyPressMask|KeyReleaseMask,&ev)==True)
-	{
-		int i;
-		KeySym *keySymMap;
-		int keysyms_per_keycode_return;
-		keySymMap=XGetKeyboardMapping(ysXDsp,ev.xkey.keycode,1,&keysyms_per_keycode_return);
-		//	 	printf("NumKeySym=%d\n",keysyms_per_keycode_return);
-		//	printf("%s %s\n",XKeysymToString(keySymMap[0]),XKeysymToString(keySymMap[1]));
-		//	printf("%d %d %d %d %d %d %d %d\n",
-		//	 (ev.xkey.state&LockMask)!=0,
-		//	 (ev.xkey.state&ShiftMask)!=0,
-		//	 (ev.xkey.state&ControlMask)!=0,
-		//	 (ev.xkey.state&Mod1Mask)!=0,  // Alt
-		//	 (ev.xkey.state&Mod2Mask)!=0,  // Num Lock
-		//	 (ev.xkey.state&Mod3Mask)!=0,
-		//	 (ev.xkey.state&Mod4Mask)!=0,  // Windows key
-		//	 (ev.xkey.state&Mod5Mask)!=0);
-
-		if(0!=(ev.xkey.state&ControlMask) || 0!=(ev.xkey.state&Mod1Mask))
-		  {
-		    chr=0;
-		  }
-		  else if((ev.xkey.state&LockMask)==0 && (ev.xkey.state&ShiftMask)==0)
-		{
-		    chr=FsXKeySymToChar(keySymMap[0]); // mapXKtoChar[keySymMap[0]];
-		}
-		else if((ev.xkey.state&LockMask)==0 && (ev.xkey.state&ShiftMask)!=0)
-		{
-		    chr=FsXKeySymToChar(keySymMap[1]); // mapXKtoChar[keySymMap[1]];
-		}
-		else if((ev.xkey.state&ShiftMask)==0 && (ev.xkey.state&LockMask)!=0)
-		{
-			chr=FsXKeySymToChar(keySymMap[0]); // mapXKtoChar[keySymMap[0]];
-			if('a'<=chr && chr<='z')
-			{
-				chr=chr+('A'-'a');
-			}
-		}
-		else if((ev.xkey.state&ShiftMask)!=0 && (ev.xkey.state&LockMask)!=0)
-		{
-			chr=FsXKeySymToChar(keySymMap[1]); // mapXKtoChar[keySymMap[1]];
-			if('a'<=chr && chr<='z')
-			{
-				chr=chr+('A'-'a');
-			}
-		}
-
-		// Memo:
-		// XK code is so badly designed.  XK_KP_Divide, XK_KP_Multiply,
-		// XK_KP_Subtract, XK_KP_Add, should not be altered to
-		// XK_XF86_Next_VMode or like that.  Other XK_KP_ code
-		// can be altered by Mod2Mask.
-
-
-		// following keys should be flipped based on Num Lock mask.  Apparently mod2mask is num lock by standard.
-		// XK_KP_Space
-		// XK_KP_Tab
-		// XK_KP_Enter
-		// XK_KP_F1
-		// XK_KP_F2
-		// XK_KP_F3
-		// XK_KP_F4
-		// XK_KP_Home
-		// XK_KP_Left
-		// XK_KP_Up
-		// XK_KP_Right
-		// XK_KP_Down
-		// XK_KP_Prior
-		// XK_KP_Page_Up
-		// XK_KP_Next
-		// XK_KP_Page_Down
-		// XK_KP_End
-		// XK_KP_Begin
-		// XK_KP_Insert
-		// XK_KP_Delete
-		// XK_KP_Equal
-		// XK_KP_Multiply
-		// XK_KP_Add
-		// XK_KP_Separator
-		// XK_KP_Subtract
-		// XK_KP_Decimal
-		// XK_KP_Divide
-
-		// XK_KP_0
-		// XK_KP_1
-		// XK_KP_2
-		// XK_KP_3
-		// XK_KP_4
-		// XK_KP_5
-		// XK_KP_6
-		// XK_KP_7
-		// XK_KP_8
-		// XK_KP_9
-
-		ks=XKeycodeToKeysym(ysXDsp,ev.xkey.keycode,0);
-		if(XK_a<=ks && ks<=XK_z)
-		{
-			ks=ks+XK_A-XK_a;
-		}
-
-		if(0<=ks && ks<FS_NUM_XK)
-		{
-			fsKey=FsXKeySymToFsInkey(ks); // mapXKtoFSKEY[ks];
-			fsKey2=FsXKeySymToFsGetKeyState(ks);
-
-			// 2005/03/29 >>
-			if(fsKey==0)
-			{
-				KeyCode kcode;
-				kcode=XKeysymToKeycode(ysXDsp,ks);
-				if(kcode!=0)
-				{
-					ks=XKeycodeToKeysym(ysXDsp,kcode,0);
-					if(XK_a<=ks && ks<=XK_z)
-					{
-						ks=ks+XK_A-XK_a;
-					}
-
-					if(0<=ks && ks<FS_NUM_XK)
-					{
-						fsKey=FsXKeySymToFsInkey(ks); // mapXKtoFSKEY[ks];
-						fsKey2=FsXKeySymToFsGetKeyState(ks);
-					}
-				}
-			}
-			// 2005/03/29 <<
-
-			if(ev.type==KeyPress && fsKey!=0)
-			{
-				fsKeyPress[fsKey]=1;
-				if(FSKEY_NULL!=fsKey2)
-				{
-					fsKeyPress[fsKey2]=1;
-				}
-				if(ev.xkey.window==ysXWnd) // 2005/04/08
-				{
-					if(nKeyBufUsed<NKEYBUF)
-					{
-						keyBuffer[nKeyBufUsed++]=fsKey;
-					}
-					if(chr!=0 && nCharBufUsed<NKEYBUF)
-					{
-						charBuffer[nCharBufUsed++]=chr;
-					}
-				}
-			}
-			else
-			{
-				fsKeyPress[fsKey]=0;
-				if(FSKEY_NULL!=fsKey2)
-				{
-					fsKeyPress[fsKey2]=0;
-				}
-			}
+	if(SDL_PollEvent(&e)){
+		switch(e.type){
+			case SDL_KEYDOWN:
+			case SDL_KEYUP:
+				execKeyEvent(e);
+				break;
+			case SDL_MOUSEBUTTONDOWN:
+			case SDL_MOUSEBUTTONUP:
+				execMouseButtonEvent(e);
+				break;
+			case SDL_MOUSEMOTION:
+				execMouseMotionEvent(e);
+				break;
+			case SDL_WINDOWEVENT_RESIZED:
+				ysXWid = event.window.data1;
+				ysXHei = event.window.data2;
+				break;
+			case SDL_WINDOWEVENT_CLOSE:
+				exit(1);
+				break;
 		}
 	}
 
-	while(XCheckWindowEvent(ysXDsp,ysXWnd,ButtonPressMask|ButtonReleaseMask|PointerMotionMask,&ev)==True)
-	{
-		if(ButtonPress==ev.type || ButtonRelease==ev.type)
-		{
-			fsKey=FSKEY_NULL;
-			if(ev.xbutton.button==Button4)
-			{
-				fsKey=FSKEY_WHEELUP;
-			}
-			else if(ev.xbutton.button==Button5)
-			{
-				fsKey=FSKEY_WHEELDOWN;
-			}
-
-			if(FSKEY_NULL!=fsKey)
-			{
-				if(ev.type==ButtonPress)
-				{
-					fsKeyPress[fsKey]=1;
-					if(ev.xbutton.window==ysXWnd)
-					{
-						if(nKeyBufUsed<NKEYBUF)
-						{
-							keyBuffer[nKeyBufUsed++]=fsKey;
-						}
-					}
-
-				}
-				else if(ev.type==ButtonRelease)
-				{
-					fsKeyPress[fsKey]=0;
-				}
-			}
-			else if(NKEYBUF>nMosBufUsed)
-			{
-				mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_NONE;
-				if(ev.type==ButtonPress)
-				{
-					switch(ev.xbutton.button)
-					{
-					case Button1:
-						mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_LBUTTONDOWN;
-						lastKnownLb=1;
-						break;
-					case Button2:
-						mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_MBUTTONDOWN;
-						lastKnownMb=1;
-						break;
-					case Button3:
-						mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_RBUTTONDOWN;
-						lastKnownRb=1;
-						break;
-					}
-				}
-				else if(ev.type==ButtonRelease)
-				{
-					switch(ev.xbutton.button)
-					{
-					case Button1:
-						mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_LBUTTONUP;
-						lastKnownLb=0;
-						break;
-					case Button2:
-						mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_MBUTTONUP;
-						lastKnownMb=0;
-						break;
-					case Button3:
-						mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_RBUTTONUP;
-						lastKnownRb=0;
-						break;
-					}
-				}
-
-				mosBuffer[nMosBufUsed].mx=ev.xbutton.x;
-				mosBuffer[nMosBufUsed].my=ev.xbutton.y;
-				// Turned out these button states are highly unreliable.
-				// It may come with (state&Button1Mask)==0 on ButtonPress event of Button 1.
-				// Confirmed this problem in VirtualBox.  This silly flaw may not occur in 
-				// real environment.
-				// mosBuffer[nMosBufUsed].lb=(0!=(ev.xbutton.state & Button1Mask));
-				// mosBuffer[nMosBufUsed].mb=(0!=(ev.xbutton.state & Button2Mask));
-				// mosBuffer[nMosBufUsed].rb=(0!=(ev.xbutton.state & Button3Mask));
-				mosBuffer[nMosBufUsed].lb=lastKnownLb;
-				mosBuffer[nMosBufUsed].mb=lastKnownMb;
-				mosBuffer[nMosBufUsed].rb=lastKnownRb;
-				mosBuffer[nMosBufUsed].shift=(0!=(ev.xbutton.state & ShiftMask));
-				mosBuffer[nMosBufUsed].ctrl=(0!=(ev.xbutton.state & ControlMask));
-
-				nMosBufUsed++;
-			}
-		}
-		else if(ev.type==MotionNotify)
-		{
-			int mx=ev.xbutton.x;
-			int my=ev.xbutton.y;
-			int lb=lastKnownLb; // XButtonEvent.state turns out to be highly unreliable  (0!=(ev.xbutton.state & Button1Mask));
-			int mb=lastKnownMb; // (0!=(ev.xbutton.state & Button2Mask));
-			int rb=lastKnownRb; // (0!=(ev.xbutton.state & Button3Mask));
-			int shift=(0!=(ev.xbutton.state & ShiftMask));
-			int ctrl=(0!=(ev.xbutton.state & ControlMask));
-
-			if(0<nMosBufUsed &&
-			   mosBuffer[nMosBufUsed-1].eventType==FSMOUSEEVENT_MOVE &&
-			   mosBuffer[nMosBufUsed-1].lb==lb &&
-			   mosBuffer[nMosBufUsed-1].mb==mb &&
-			   mosBuffer[nMosBufUsed-1].rb==rb &&
-			   mosBuffer[nMosBufUsed-1].shift==shift &&
-			   mosBuffer[nMosBufUsed-1].ctrl==ctrl)
-			{
-				mosBuffer[nMosBufUsed-1].mx=mx;
-				mosBuffer[nMosBufUsed-1].my=my;
-			}
-
-			if(NKEYBUF>nMosBufUsed)
-			{
-				mosBuffer[nMosBufUsed].mx=mx;
-				mosBuffer[nMosBufUsed].my=my;
-				mosBuffer[nMosBufUsed].lb=lb;
-				mosBuffer[nMosBufUsed].mb=mb;
-				mosBuffer[nMosBufUsed].rb=rb;
-				mosBuffer[nMosBufUsed].shift=shift;
-				mosBuffer[nMosBufUsed].ctrl=ctrl;
-
-				mosBuffer[nMosBufUsed].eventType=FSMOUSEEVENT_MOVE;
-
-				nMosBufUsed++;
-			}
-		}
-	}
-
-	if(XCheckTypedWindowEvent(ysXDsp,ysXWnd,ConfigureNotify,&ev)==True)
-	{
-		ysXWid=ev.xconfigure.width;
-		ysXHei=ev.xconfigure.height;
-		ysXlupX=ev.xconfigure.x;
-		ysXlupY=ev.xconfigure.y;
-	}
-
-	if(XCheckWindowEvent(ysXDsp,ysXWnd,ExposureMask,&ev)==True)
-	{
-		exposure=1;
-		if(NULL!=fsOnPaintCallback)
-		{
-			(*fsOnPaintCallback)(fsOnPaintCallbackParam);
-		}
-	}
-
+	/*
 	// Clipboard Tunnel for FsGuiLib >>
 	if(True==XCheckTypedWindowEvent(ysXDsp,ysXWnd,SelectionRequest,&ev) ||
 	   True==XCheckTypedWindowEvent(ysXDsp,ysXWnd,SelectionClear,&ev))
@@ -786,11 +581,7 @@ void FsPollDevice(void)
 		}
 	}
 	// Clipboard Tunnel for FsGuiLib <<
-
-	if(XCheckTypedWindowEvent(ysXDsp,ysXWnd,DestroyNotify,&ev)==True)
-	{
-		exit(1);
-	}
+	*/
 
 	return;
 }
@@ -813,71 +604,27 @@ void FsPushOnPaintEvent(void)
 
 void FsCloseWindow(void)
 {
-	if(NULL!=clipBoardContent)
-	{
-		delete [] clipBoardContent;
-	}
-	if(NULL!=pastedContent)
-	{
-		delete [] pastedContent;
-	}
-	XCloseDisplay(ysXDsp);
-}
-
-static void FsChangeWindowState(int setOrRemove,const char propertyName[])
-{
-	Atom _NET_WM_STATE=XInternAtom(ysXDsp,"_NET_WM_STATE",False);
-	Atom _NET_WM_STATE_ADD=XInternAtom(ysXDsp,"_NET_WM_STATE_ADD",False); // Somehow doesn't work
-	Atom _NET_WM_STATE_REMOVE=XInternAtom(ysXDsp,"_NET_WM_STATE_REMOVE",False); // Somehow doesn't work
-	Atom _NET_WM_STATE_Property=XInternAtom(ysXDsp,propertyName,False);
-
-	// From https://pyra-handheld.com/boards/threads/x11-fullscreen-howto.70443/
-	XEvent evt;
-	evt.xclient.type=ClientMessage;
-	evt.xclient.serial=0;
-	evt.xclient.send_event=True;
-	evt.xclient.window=ysXWnd;
-	evt.xclient.message_type=_NET_WM_STATE;
-	evt.xclient.format=32;
-	evt.xclient.data.l[0]=setOrRemove;
-	evt.xclient.data.l[1]=_NET_WM_STATE_Property;
-	evt.xclient.data.l[2]=0;
-	evt.xclient.data.l[3]=0;
-	evt.xclient.data.l[4]=0;
-	XSendEvent(ysXDsp,RootWindow(ysXDsp,ysXVis->screen),False,SubstructureRedirectMask|SubstructureNotifyMask,&evt);
+	SDL_Quit();
 }
 
 void FsMaximizeWindow(void)
 {
-	FsChangeWindowState(0,"_NET_WM_STATE_FULLSCREEN");
-	FsChangeWindowState(1,"_NET_WM_STATE_MAXIMIZED_HORZ");
-	FsChangeWindowState(1,"_NET_WM_STATE_MAXIMIZED_VERT");
+	SDL_MaximizeWindow(ysWindow);
 }
 
 void FsUnmaximizeWindow(void)
 {
-	FsChangeWindowState(0,"_NET_WM_STATE_MAXIMIZED_HORZ");
-	FsChangeWindowState(0,"_NET_WM_STATE_MAXIMIZED_VERT");
-	FsChangeWindowState(0,"_NET_WM_STATE_FULLSCREEN");
+	SDL_RestoreWindow(ysWindow);
 }
 void FsMakeFullScreen(void)
 {
-	FsChangeWindowState(0,"_NET_WM_STATE_MAXIMIZED_HORZ");
-	FsChangeWindowState(0,"_NET_WM_STATE_MAXIMIZED_VERT");
-	FsChangeWindowState(1,"_NET_WM_STATE_FULLSCREEN");
+	//SDL_SetWindowFullscreen(ywWindow, SDL_WINDOW_FULLSCREEN);
+	SDL_SetWindowFullscreen(ywWindow, SDL_WINDOW_FULLSCREEN_DESKTOP);
 }
 
 void FsSleep(int ms)
 {
-	if(ms>0)
-	{
-		fd_set set;
-		struct timeval wait;
-		wait.tv_sec=ms/1000;
-		wait.tv_usec=(ms%1000)*1000;
-		FD_ZERO(&set);
-		select(0,&set,NULL,NULL,&wait);
-	}
+	SDL_Delay(ms);
 }
 
 long long int FsPassedTime(void)
@@ -931,12 +678,10 @@ long long int FsSubSecondTimer(void)
 
 void FsGetMouseState(int &lb,int &mb,int &rb,int &mx,int &my)
 {
-	Window r,c;
-	int xInRoot,yInRoot;
 	unsigned int mask;
-
-	XQueryPointer(ysXDsp,ysXWnd,&r,&c,&xInRoot,&yInRoot,&mx,&my,&mask);
 	
+	mask = SDL_GetMouseState(&mx, &my);
+
 	/* These masks are seriouly unreliable.  It could still report zero after ButtonPress event 
 	   is issued.  Therefore, it causes inconsistency and unusable.  Flaw confirmed in VirtualBox.
 	lb=((mask & Button1Mask) ? 1 : 0);
@@ -946,6 +691,12 @@ void FsGetMouseState(int &lb,int &mb,int &rb,int &mx,int &my)
 	lb=lastKnownLb;
 	mb=lastKnownMb;
 	rb=lastKnownRb;
+
+	/*
+	lb = (mask & SDL_BUTTON_LMASK) ? 1 : 0;
+	mb = (mask & SDL_BUTTON_MMASK) ? 1 : 0;
+	rb = (mask & SDL_BUTTON_RMASK) ? 1 : 0;
+	*/
 }
 
 void FsSetMousePosition(int mx,int my)
@@ -953,7 +704,7 @@ void FsSetMousePosition(int mx,int my)
 	// This should move the mouse cursor to the given location.
 	// However, it doesn't in VirtualBox.
 	// This function may no longer implemented.
-	XWarpPointer(ysXDsp,ysXWnd,ysXWnd,0,0,ysXWid,ysXHei,mx,my);
+	SDL_WarpMouseGlobal(mx,my);
 }
 
 int FsGetMouseEvent(int &lb,int &mb,int &rb,int &mx,int &my)
@@ -1040,6 +791,7 @@ int FsCheckWindowExposure(void)
 
 
 
+#if 0
 ////////////////////////////////////////////////////////////
 // Clipboard support
 static void ProcessSelectionRequest(XEvent &evt)
@@ -1076,6 +828,7 @@ static void ProcessSelectionRequest(XEvent &evt)
 
 	XSendEvent(ysXDsp,evt.xselectionrequest.requestor,True,NoEventMask,&reply);
 }
+#endif
 
 void FsX11GetClipBoardString(long long int &returnLength,char *&returnStr)
 {
@@ -1086,75 +839,12 @@ void FsX11GetClipBoardString(long long int &returnLength,char *&returnStr)
 	pastedContent=NULL;
 	pastedContentLength=0;
 
-	returnLength=0;
-	returnStr=NULL;
-
-	Atom clipboardAtom=XInternAtom(ysXDsp,"CLIPBOARD",0);
-	Atom dataReceiverAtom=XInternAtom(ysXDsp,"GET_DATA",0); // For receiving
-
-	Atom type_return;
-	int format_return;
-	long unsigned int nitems_return;
-	long unsigned int bytes_after_return;
-	unsigned char *bufPtr=NULL;
-
-	XConvertSelection(ysXDsp,clipboardAtom,XA_STRING,dataReceiverAtom,ysXWnd,CurrentTime);
-
-	// See experiment/XWindow/cutbuf/selfcopypaste.cpp
-	//   If this program owns a clipboard, and also inquire the clipboard contents,
-	//   this program needs to manage both SelectionRequest and SelectionNotify to
-	//   return the clipboard content.
-	for(;;)
-	{
-		XEvent evt;
-		if(True==XCheckTypedWindowEvent(ysXDsp,ysXWnd,SelectionRequest,&evt) ||
-		   True==XCheckTypedWindowEvent(ysXDsp,ysXWnd,SelectionClear,&evt) ||
-		   True==XCheckTypedWindowEvent(ysXDsp,ysXWnd,SelectionNotify,&evt))
-		{
-			if(evt.type==SelectionRequest)
-			{
-				ProcessSelectionRequest(evt);
-			}
-			else if(evt.type==SelectionClear)
-			{
-				printf("Lost selection ownership.\n");
-			}
-			else if(evt.type==SelectionNotify)
-			{
-				if(None!=evt.xselection.property)
-				{
-					Atom type_return;
-					int format_return;
-					long unsigned int nitems_return;
-					long unsigned int bytes_after_return;
-					unsigned char *bufPtr=NULL;
-
-					XGetWindowProperty(ysXDsp,ysXWnd,evt.xselection.property,0,256,False,XA_STRING,&type_return,&format_return,&nitems_return,&bytes_after_return,&bufPtr);
-
-					printf("Type %d\n",(int)type_return);
-					printf("%d bytes\n",(int)nitems_return);
-					printf("%d remain\n",(int)bytes_after_return);
-					printf("%s\n",bufPtr);
-
-					pastedContentLength=nitems_return;
-					pastedContent=new char [nitems_return];
-					for(int idx=0; idx<nitems_return; ++idx)
-					{
-						pastedContent[idx]=(char)bufPtr[idx];
-					}
-
-					XFree(bufPtr);
-				}
-				else
-				{
-					printf("No selection.\n");
-				}
-				break;
-			}
-			else
-			{
-				printf("Other event.\n");
-			}
+	char *str = SDL_GetPrimarySelectionText();
+	if(str){
+		pastedContentLength = strlen(str);
+		if(pastedContentLength){
+			pastedContent=new char [pastedContentLength];
+			memcpy(pastedContent, str, pastedContentLength);
 		}
 	}
 
@@ -1164,23 +854,9 @@ void FsX11GetClipBoardString(long long int &returnLength,char *&returnStr)
 
 void FsX11SetClipBoardString(long long int length,const char str[])
 {
-	if(NULL!=clipBoardContent)
-	{
-		delete [] clipBoardContent;
-		clipBoardContent=NULL;
-		clipBoardContentLength=0;
+	if(length){
+		SDL_SetClipboardText(str);
 	}
-
-	clipBoardContentLength=length;
-	clipBoardContent=new char [length];
-	for(int i=0; i<length; ++i)
-	{
-		clipBoardContent[i]=str[i];
-	}
-
-	Atom clipboardAtom=XInternAtom(ysXDsp,"CLIPBOARD",0);
-	XSetSelectionOwner(ysXDsp,clipboardAtom,ysXWnd,CurrentTime);
-	XSetSelectionOwner(ysXDsp,XA_PRIMARY,ysXWnd,CurrentTime);
 }
 
 void FsChangeToProgramDir(void)
