@@ -10,7 +10,7 @@ if(APPLE)
 elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
 	set(LIB_DEPENDENCY EGL GLESv2)
 elseif(UNIX)
-	set(LIB_DEPENDENCY GL GLU X11)
+	set(LIB_DEPENDENCY GL GLU X11 SDL2)
 else()
 	set(LIB_DEPENDENCY)
 endif()
@@ -35,9 +35,13 @@ elseif(APPLE)
 		macosx/fsmacosxwrapperobjc.m
 	)
 elseif(UNIX)
+	#set(platform_SRCS
+	#glx/fsglxkeymap.cpp
+	#glx/fsglxwrapper.cpp
+	#)
 	set(platform_SRCS
 		glx/fsglxkeymap.cpp
-		glx/fsglxwrapper.cpp
+		sdl/fssdlwrapper.cpp
 	)
 else()
 	set(platform_SRCS "")

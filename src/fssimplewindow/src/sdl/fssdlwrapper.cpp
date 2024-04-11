@@ -44,8 +44,9 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <fcntl.h>
 #include <errno.h>
 
-#include <SDL.h>
-#include <SDL_opengl.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_opengl.h>
+#include <SDL2/SDL_clipboard.h>
 #include <GL/gl.h>
 #include <GL/glu.h>
 #include <GL/glx.h>
@@ -184,10 +185,12 @@ void FsOpenWindow(const FsOpenWindowOption &opt)
 	glEnable(GL_COLOR_MATERIAL);
 	glEnable(GL_NORMALIZE);
 
+	/*
 	if(0!=tryAlternativeSingleBuffer)
 	{
 		glDrawBuffer(GL_FRONT);
 	}
+	*/
 
 	glClearColor(1.0F,1.0F,1.0F,0.0F);
 	glClearDepth(1.0F);
@@ -257,7 +260,6 @@ static void execKeyEvent(SDL_Event ev)
 
 	fsKey=FSKEY_NULL;
 
-	int i;
 	// SDL_Scancode ev.key.keysym.scancode;
 	// SDL_Keycode ev.key.keysym.sym;
 	// SDL_Keymod ev.key.keysym.mod;
@@ -268,15 +270,15 @@ static void execKeyEvent(SDL_Event ev)
 	}
 	else if((ev.key.keysym.mod&KMOD_CAPS)==0 && (ev.key.keysym.mod&KMOD_SHIFT)==0)
 	{
-		chr=FsXKeySymToChar(keySymMap[0]); // mapXKtoChar[keySymMap[0]];
+		chr=FsXKeySymToChar(ev.key.keysym.sym); // mapXKtoChar[keySymMap[0]];
 	}
 	else if((ev.key.keysym.mod&KMOD_CAPS)==0 && (ev.key.keysym.mod&KMOD_SHIFT)!=0)
 	{
-		chr=FsXKeySymToChar(keySymMap[1]); // mapXKtoChar[keySymMap[1]];
+		chr=FsXKeySymToChar(ev.key.keysym.sym); // mapXKtoChar[keySymMap[1]];
 	}
 	else if((ev.key.keysym.mod&KMOD_SHIFT)==0 && (ev.key.keysym.mod&KMOD_CAPS)!=0)
 	{
-		chr=FsXKeySymToChar(keySymMap[0]); // mapXKtoChar[keySymMap[0]];
+		chr=FsXKeySymToChar(ev.key.keysym.sym); // mapXKtoChar[keySymMap[0]];
 		if('a'<=chr && chr<='z')
 		{
 			chr=chr+('A'-'a');
@@ -284,7 +286,7 @@ static void execKeyEvent(SDL_Event ev)
 	}
 	else if((ev.key.keysym.mod&KMOD_SHIFT)!=0 && (ev.key.keysym.mod&KMOD_CAPS)!=0)
 	{
-		chr=FsXKeySymToChar(keySymMap[1]); // mapXKtoChar[keySymMap[1]];
+		chr=FsXKeySymToChar(ev.key.keysym.sym); // mapXKtoChar[keySymMap[1]];
 		if('a'<=chr && chr<='z')
 		{
 			chr=chr+('A'-'a');
@@ -341,7 +343,7 @@ static void execKeyEvent(SDL_Event ev)
 	ks=ev.key.keysym.sym;
 	if(SDLK_a<=ks && ks<=SDLK_z)
 	{
-		ks=ks+SDLK_A-SDLK_a;
+		//ks=ks+SDLK_A-SDLK_a;
 	}
 
 	if(0<=ks && ks<FS_NUM_XK)
@@ -356,10 +358,10 @@ static void execKeyEvent(SDL_Event ev)
 			kcode=SDL_GetScancodeFromKey(ks);
 			if(kcode!=0)
 			{
-				ks=XKeycodeToKeysym(ysXDsp,kcode,0);
+				ks=SDL_GetKeyFromScancode(kcode);
 				if(SDLK_a<=ks && ks<=SDLK_z)
 				{
-					ks=ks+SDLK_A-SDLK_a;
+					//ks=ks+SDLK_A-SDLK_a;
 				}
 
 				if(0<=ks && ks<FS_NUM_XK)
@@ -371,14 +373,14 @@ static void execKeyEvent(SDL_Event ev)
 		}
 		// 2005/03/29 <<
 
-		if(ev.type==KeyPress && fsKey!=0)
+		if(ev.type==SDL_KEYDOWN && fsKey!=0)
 		{
 			fsKeyPress[fsKey]=1;
 			if(FSKEY_NULL!=fsKey2)
 			{
 				fsKeyPress[fsKey2]=1;
 			}
-			if(ev.xkey.window==ysXWnd) // 2005/04/08
+			//if(ev.xkey.window==ysXWnd) // 2005/04/08
 			{
 				if(nKeyBufUsed<NKEYBUF)
 				{
@@ -422,7 +424,7 @@ static void execMouseButtonEvent(SDL_Event ev)
 			if(ev.type==SDL_MOUSEBUTTONDOWN)
 			{
 				fsKeyPress[fsKey]=1;
-				if(ev.button.window==ysXWnd)
+				//if(ev.button.window==ysXWnd)
 				{
 					if(nKeyBufUsed<NKEYBUF)
 					{
@@ -536,7 +538,7 @@ static void execMouseMotionEvent(SDL_Event ev)
 
 void FsPollDevice(void)
 {
-	if(NULL==ysXWnd)
+	if(NULL==ysWindow)
 	{
 		return;
 	}
@@ -557,10 +559,10 @@ void FsPollDevice(void)
 				execMouseMotionEvent(e);
 				break;
 			case SDL_WINDOWEVENT_RESIZED:
-				ysXWid = event.window.data1;
-				ysXHei = event.window.data2;
+				ysXWid = e.window.data1;
+				ysXHei = e.window.data2;
 				break;
-			case SDL_WINDOWEVENT_CLOSE:
+			case SDL_QUIT:
 				exit(1);
 				break;
 		}
@@ -588,6 +590,7 @@ void FsPollDevice(void)
 
 void FsPushOnPaintEvent(void)
 {
+	/*
 	XExposeEvent evt;
 	evt.type=Expose;
 	evt.serial=0;
@@ -600,6 +603,7 @@ void FsPushOnPaintEvent(void)
 	evt.height=ysXHei;
 	evt.count=0;
 	XSendEvent(ysXDsp,ysXWnd,true,ExposureMask,(XEvent *)&evt);
+	*/
 }
 
 void FsCloseWindow(void)
@@ -619,7 +623,7 @@ void FsUnmaximizeWindow(void)
 void FsMakeFullScreen(void)
 {
 	//SDL_SetWindowFullscreen(ywWindow, SDL_WINDOW_FULLSCREEN);
-	SDL_SetWindowFullscreen(ywWindow, SDL_WINDOW_FULLSCREEN_DESKTOP);
+	SDL_SetWindowFullscreen(ysWindow, SDL_WINDOW_FULLSCREEN_DESKTOP);
 }
 
 void FsSleep(int ms)
@@ -737,7 +741,8 @@ int FsGetMouseEvent(int &lb,int &mb,int &rb,int &mx,int &my)
 void FsSwapBuffers(void)
 {
 	glFlush();
-	glXSwapBuffers(ysXDsp,ysXWnd);
+	//glXSwapBuffers(ysXDsp,ysXWnd);
+	SDL_GL_SwapWindow(ysWindow);
 }
 
 int FsInkey(void)
@@ -839,7 +844,7 @@ void FsX11GetClipBoardString(long long int &returnLength,char *&returnStr)
 	pastedContent=NULL;
 	pastedContentLength=0;
 
-	char *str = SDL_GetPrimarySelectionText();
+	char *str = SDL_GetClipboardText();
 	if(str){
 		pastedContentLength = strlen(str);
 		if(pastedContentLength){
