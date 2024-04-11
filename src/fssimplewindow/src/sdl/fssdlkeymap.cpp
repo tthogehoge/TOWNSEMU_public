@@ -177,12 +177,12 @@ void FsXCreateKeyMapping(void)
 	FsXAddKeyMapping(FSKEY_SCROLLLOCK,          SDLK_SCROLLLOCK);
 	FsXAddKeyMapping(FSKEY_PAUSEBREAK,          SDLK_PAUSE);
 	FsXAddKeyMapping(FSKEY_TILDA,               SDLK_BACKQUOTE);
-	FsXAddKeyMapping(FSKEY_MINUS,               SDLK_MINUs);
-	FsXAddKeyMapping(FSKEY_PLUS,                SDLK_EQUAL); // There was a mix up.
+	FsXAddKeyMapping(FSKEY_MINUS,               SDLK_MINUS);
+	FsXAddKeyMapping(FSKEY_PLUS,                SDLK_EQUALS); // There was a mix up.
 	FsXAddKeyMapping(FSKEY_BS,                  SDLK_BACKSPACE);
 	FsXAddKeyMapping(FSKEY_TAB,                 SDLK_TAB);
-	FsXAddKeyMapping(FSKEY_LBRACKET,            SDLK_BRACKETLEFT);
-	FsXAddKeyMapping(FSKEY_RBRACKET,            SDLK_BRACKETRIGHT);
+	FsXAddKeyMapping(FSKEY_LBRACKET,            SDLK_LEFTBRACKET);
+	FsXAddKeyMapping(FSKEY_RBRACKET,            SDLK_RIGHTBRACKET);
 	FsXAddKeyMapping(FSKEY_BACKSLASH,           SDLK_BACKSLASH);
 	FsXAddKeyMapping(FSKEY_CAPSLOCK,            0);
 	FsXAddKeyMapping(FSKEY_SEMICOLON,           ';');
@@ -226,6 +226,7 @@ void FsXCreateKeyMapping(void)
 	FsXAddKeyMapping(FSKEY_TENPLUS,             SDLK_KP_PLUS);
 	FsXAddKeyMapping(FSKEY_TENENTER,            SDLK_KP_ENTER);
 
+	/*
 	FsXAddKeyMapping(FSKEY_TEN0,                SDLK_KP_INSERT);
 	FsXAddKeyMapping(FSKEY_TEN1,                SDLK_KP_END);
 	FsXAddKeyMapping(FSKEY_TEN2,                SDLK_KP_DOWN);
@@ -237,19 +238,20 @@ void FsXCreateKeyMapping(void)
 	FsXAddKeyMapping(FSKEY_TEN8,                SDLK_KP_UP);
 	FsXAddKeyMapping(FSKEY_TEN9,                SDLK_KP_PAGEUP);
 	FsXAddKeyMapping(FSKEY_TENDOT,              SDLK_KP_DELETE);
+	*/
 	// FsXAddKeyMapping(FSKEY_TENSLASH,            SDLK_KP_Divide);
 	// FsXAddKeyMapping(FSKEY_TENSTAR,             SDLK_KP_Multiply);
 	// FsXAddKeyMapping(FSKEY_TENMINUS,            SDLK_KP_Subtract);
 	// FsXAddKeyMapping(FSKEY_TENPLUS,             SDLK_KP_Add);
 	// FsXAddKeyMapping(FSKEY_TENENTER,            SDLK_KP_Enter);
 
-	FsXAddKeyMapping(FSKEY_CONVERT,             SDLK_Henkan);
-	FsXAddKeyMapping(FSKEY_NONCONVERT,          SDLK_Muhenkan);
-	FsXAddKeyMapping(FSKEY_KANA,                SDLK_Kana_Lock);
-	FsXAddKeyMapping(FSKEY_CONTEXT,             SDLK_Menu);
+	//FsXAddKeyMapping(FSKEY_CONVERT,             SDL_SCANCODE_INTERNATIONAL4); 
+	//FsXAddKeyMapping(FSKEY_NONCONVERT,          SDL_SCANCODE_INTERNATIONAL5); 
+	//FsXAddKeyMapping(FSKEY_KANA,                SDL_SCANCODE_INTERNATIONAL2); 
+	FsXAddKeyMapping(FSKEY_CONTEXT,             SDLK_APPLICATION);
 
 
-	FsXAddKeysymToCharMapping(SDLK_space,         ' ');
+	FsXAddKeysymToCharMapping(SDLK_SPACE,         ' ');
 	FsXAddKeysymToCharMapping(SDLK_0,             '0');
 	FsXAddKeysymToCharMapping(SDLK_1,             '1');
 	FsXAddKeysymToCharMapping(SDLK_2,             '2');
@@ -260,32 +262,6 @@ void FsXCreateKeyMapping(void)
 	FsXAddKeysymToCharMapping(SDLK_7,             '7');
 	FsXAddKeysymToCharMapping(SDLK_8,             '8');
 	FsXAddKeysymToCharMapping(SDLK_9,             '9');
-	FsXAddKeysymToCharMapping(SDLK_A,             'A');
-	FsXAddKeysymToCharMapping(SDLK_B,             'B');
-	FsXAddKeysymToCharMapping(SDLK_C,             'C');
-	FsXAddKeysymToCharMapping(SDLK_D,             'D');
-	FsXAddKeysymToCharMapping(SDLK_E,             'E');
-	FsXAddKeysymToCharMapping(SDLK_F,             'F');
-	FsXAddKeysymToCharMapping(SDLK_G,             'G');
-	FsXAddKeysymToCharMapping(SDLK_H,             'H');
-	FsXAddKeysymToCharMapping(SDLK_I,             'I');
-	FsXAddKeysymToCharMapping(SDLK_J,             'J');
-	FsXAddKeysymToCharMapping(SDLK_K,             'K');
-	FsXAddKeysymToCharMapping(SDLK_L,             'L');
-	FsXAddKeysymToCharMapping(SDLK_M,             'M');
-	FsXAddKeysymToCharMapping(SDLK_N,             'N');
-	FsXAddKeysymToCharMapping(SDLK_O,             'O');
-	FsXAddKeysymToCharMapping(SDLK_P,             'P');
-	FsXAddKeysymToCharMapping(SDLK_Q,             'Q');
-	FsXAddKeysymToCharMapping(SDLK_R,             'R');
-	FsXAddKeysymToCharMapping(SDLK_S,             'S');
-	FsXAddKeysymToCharMapping(SDLK_T,             'T');
-	FsXAddKeysymToCharMapping(SDLK_U,             'U');
-	FsXAddKeysymToCharMapping(SDLK_V,             'V');
-	FsXAddKeysymToCharMapping(SDLK_W,             'W');
-	FsXAddKeysymToCharMapping(SDLK_X,             'X');
-	FsXAddKeysymToCharMapping(SDLK_Y,             'Y');
-	FsXAddKeysymToCharMapping(SDLK_Z,             'Z');
 	FsXAddKeysymToCharMapping(SDLK_a,             'a');
 	FsXAddKeysymToCharMapping(SDLK_b,             'b');
 	FsXAddKeysymToCharMapping(SDLK_c,             'c');
@@ -312,44 +288,44 @@ void FsXCreateKeyMapping(void)
 	FsXAddKeysymToCharMapping(SDLK_x,             'x');
 	FsXAddKeysymToCharMapping(SDLK_y,             'y');
 	FsXAddKeysymToCharMapping(SDLK_z,             'z');
-	FsXAddKeysymToCharMapping(SDLK_Escape,        0x1b);
-	FsXAddKeysymToCharMapping(SDLK_BackSpace,     0x08);
-	FsXAddKeysymToCharMapping(SDLK_Tab,           '\t');
-	FsXAddKeysymToCharMapping(SDLK_Return,        '\n');
+	FsXAddKeysymToCharMapping(SDLK_ESCAPE,        0x1b);
+	FsXAddKeysymToCharMapping(SDLK_BACKSPACE,     0x08);
+	FsXAddKeysymToCharMapping(SDLK_TAB,           '\t');
+	FsXAddKeysymToCharMapping(SDLK_RETURN,        '\n');
 
 	
-	FsXAddKeysymToCharMapping(SDLK_grave,         '`');
-	FsXAddKeysymToCharMapping(SDLK_asciitilde,    '~');
-	FsXAddKeysymToCharMapping(SDLK_exclam,        '!');
-	FsXAddKeysymToCharMapping(SDLK_at,            '@');
-	FsXAddKeysymToCharMapping(SDLK_numbersign,    '#');
-	FsXAddKeysymToCharMapping(SDLK_dollar,        '$');
-	FsXAddKeysymToCharMapping(SDLK_percent,       '%');
-	FsXAddKeysymToCharMapping(SDLK_asciicircum,   '^');
-	FsXAddKeysymToCharMapping(SDLK_ampersand,     '&');
-	FsXAddKeysymToCharMapping(SDLK_asterisk,      '*');
-	FsXAddKeysymToCharMapping(SDLK_parenleft,     '(');
-	FsXAddKeysymToCharMapping(SDLK_parenright,    ')');
-	FsXAddKeysymToCharMapping(SDLK_minus,         '-');
-	FsXAddKeysymToCharMapping(SDLK_underscore,    '_');
-	FsXAddKeysymToCharMapping(SDLK_equal,         '=');
-	FsXAddKeysymToCharMapping(SDLK_plus,          '+');
-	FsXAddKeysymToCharMapping(SDLK_bracketleft,   '[');
-	FsXAddKeysymToCharMapping(SDLK_braceleft,     '{');
-	FsXAddKeysymToCharMapping(SDLK_bracketright,  ']');
-	FsXAddKeysymToCharMapping(SDLK_braceright,    '}');
-	FsXAddKeysymToCharMapping(SDLK_backslash,     '\\');
-	FsXAddKeysymToCharMapping(SDLK_bar,           '|');
-	FsXAddKeysymToCharMapping(SDLK_semicolon,     ';');
-	FsXAddKeysymToCharMapping(SDLK_colon,         ':');
-	FsXAddKeysymToCharMapping(SDLK_apostrophe,    '\'');
-	FsXAddKeysymToCharMapping(SDLK_quotedbl,      '\"');
-	FsXAddKeysymToCharMapping(SDLK_comma,         ',');
-	FsXAddKeysymToCharMapping(SDLK_less,          '<');
-	FsXAddKeysymToCharMapping(SDLK_period,        '.');
-	FsXAddKeysymToCharMapping(SDLK_greater,       '>');
-	FsXAddKeysymToCharMapping(SDLK_slash,         '/');
-	FsXAddKeysymToCharMapping(SDLK_question,      '?');
+	FsXAddKeysymToCharMapping(SDLK_BACKQUOTE,     '`');
+	FsXAddKeysymToCharMapping(SDLK_CARET,         '~');
+	FsXAddKeysymToCharMapping(SDLK_EXCLAIM,       '!');
+	FsXAddKeysymToCharMapping(SDLK_AT,            '@');
+	FsXAddKeysymToCharMapping(SDLK_HASH,          '#');
+	FsXAddKeysymToCharMapping(SDLK_DOLLAR,        '$');
+	FsXAddKeysymToCharMapping(SDLK_PERCENT,       '%');
+	FsXAddKeysymToCharMapping(SDLK_CARET,         '^');
+	FsXAddKeysymToCharMapping(SDLK_AMPERSAND,     '&');
+	FsXAddKeysymToCharMapping(SDLK_ASTERISK,      '*');
+	FsXAddKeysymToCharMapping(SDLK_LEFTPAREN,     '(');
+	FsXAddKeysymToCharMapping(SDLK_RIGHTPAREN,    ')');
+	FsXAddKeysymToCharMapping(SDLK_MINUS,         '-');
+	FsXAddKeysymToCharMapping(SDLK_UNDERSCORE,    '_');
+	FsXAddKeysymToCharMapping(SDLK_EQUALS,        '=');
+	FsXAddKeysymToCharMapping(SDLK_PLUS,          '+');
+	FsXAddKeysymToCharMapping(SDLK_LEFTBRACKET,   '[');
+	FsXAddKeysymToCharMapping(SDLK_LEFTBRACKET,   '{');
+	FsXAddKeysymToCharMapping(SDLK_RIGHTBRACKET,  ']');
+	FsXAddKeysymToCharMapping(SDLK_RIGHTBRACKET,  '}');
+	FsXAddKeysymToCharMapping(SDLK_BACKSLASH,     '\\');
+	FsXAddKeysymToCharMapping(SDLK_BACKSLASH,     '|');
+	FsXAddKeysymToCharMapping(SDLK_SEMICOLON,     ';');
+	FsXAddKeysymToCharMapping(SDLK_COLON,         ':');
+	FsXAddKeysymToCharMapping(SDLK_QUOTE,         '\'');
+	FsXAddKeysymToCharMapping(SDLK_QUOTEDBL,      '\"');
+	FsXAddKeysymToCharMapping(SDLK_COMMA,         ',');
+	FsXAddKeysymToCharMapping(SDLK_LESS,          '<');
+	FsXAddKeysymToCharMapping(SDLK_PERIOD,        '.');
+	FsXAddKeysymToCharMapping(SDLK_GREATER,       '>');
+	FsXAddKeysymToCharMapping(SDLK_SLASH,         '/');
+	FsXAddKeysymToCharMapping(SDLK_QUESTION,      '?');
 
 	FsXAddKeysymToCharMapping(SDLK_KP_0,          '0');
 	FsXAddKeysymToCharMapping(SDLK_KP_1,          '1');
@@ -361,12 +337,12 @@ void FsXCreateKeyMapping(void)
 	FsXAddKeysymToCharMapping(SDLK_KP_7,          '7');
 	FsXAddKeysymToCharMapping(SDLK_KP_8,          '8');
 	FsXAddKeysymToCharMapping(SDLK_KP_9,          '9');
-	FsXAddKeysymToCharMapping(SDLK_KP_Decimal,    '.');
-	FsXAddKeysymToCharMapping(SDLK_KP_Divide,     '/');
-	FsXAddKeysymToCharMapping(SDLK_KP_Multiply,   '*');
-	FsXAddKeysymToCharMapping(SDLK_KP_Subtract,   '-');
-	FsXAddKeysymToCharMapping(SDLK_KP_Add,        '+');
-	FsXAddKeysymToCharMapping(SDLK_KP_Enter,      '\n');
+	FsXAddKeysymToCharMapping(SDLK_KP_DECIMAL,    '.');
+	FsXAddKeysymToCharMapping(SDLK_KP_DIVIDE,     '/');
+	FsXAddKeysymToCharMapping(SDLK_KP_MULTIPLY,   '*');
+	FsXAddKeysymToCharMapping(SDLK_KP_MINUS,      '-');
+	FsXAddKeysymToCharMapping(SDLK_KP_PLUS,       '+');
+	FsXAddKeysymToCharMapping(SDLK_KP_ENTER,      '\n');
 }
 
 int FsXKeySymToFsInkey(int keysym)

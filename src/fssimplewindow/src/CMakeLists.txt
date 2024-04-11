@@ -40,7 +40,8 @@ elseif(UNIX)
 	#glx/fsglxwrapper.cpp
 	#)
 	set(platform_SRCS
-		glx/fsglxkeymap.cpp
+		sdl/fssdlkeymap.cpp
+		#glx/fsglxkeymap.cpp
 		sdl/fssdlwrapper.cpp
 	)
 else()
