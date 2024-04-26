@@ -1,6 +1,6 @@
 /* ////////////////////////////////////////////////////////////
 
-File Name: fsglxwrapper.cpp
+File Name: fssdlwrapper.cpp
 Copyright (c) 2017 Soji Yamakawa.  All rights reserved.
 http://www.ysflight.com
 
@@ -45,11 +45,7 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <errno.h>
 
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_opengl.h>
 #include <SDL2/SDL_clipboard.h>
-#include <GL/gl.h>
-#include <GL/glu.h>
-#include <GL/glx.h>
 
 
 #include "fssimplewindow.h"
@@ -82,14 +78,7 @@ static SDL_Event ev_key;
 
 
 static SDL_Window* ysWindow;
-static SDL_GLContext ysContext;
-static Colormap ysXCMap;
-static XVisualInfo *ysXVis;
-static const int ysXEventMask=(KeyPressMask|KeyReleaseMask|ButtonPressMask|ButtonReleaseMask|PointerMotionMask|ExposureMask|StructureNotifyMask);
-
-static GLXContext ysGlRC;
-static int ysGlxCfgSingle[]={GLX_RGBA,GLX_DEPTH_SIZE,16,None};
-static int ysGlxCfgDouble[]={GLX_DOUBLEBUFFER,GLX_RGBA,GLX_DEPTH_SIZE,16,None};
+SDL_Renderer *ysRender;
 
 static int ysXWid,ysXHei,ysXlupX,ysXlupY;
 
@@ -104,7 +93,6 @@ static int lastKnownLb=0,lastKnownMb=0,lastKnownRb=0;
 // For FsGui library tunnel >>
 static long long int pastedContentLength=0;
 static char *pastedContent=NULL;
-static void ProcessSelectionRequest(XEvent &evt);
 // For FsGui library tunnel <<
 
 
@@ -140,75 +128,25 @@ void FsOpenWindow(const FsOpenWindowOption &opt)
 		exit(1);
 	}
 	printf("SDL_Init OK.\n");
-	if(useDoubleBuffer){
-		SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);
-	}
 	ysWindow = SDL_CreateWindow(title,
 			SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 			wid,hei,
-			SDL_WINDOW_OPENGL);
+			0);
 	if(ysWindow==NULL){
 		fprintf(stderr,"Cannot Open Display.\n");
 		exit(1);
 	}
 	printf("Opened display.\n");
-	ysContext = SDL_GL_CreateContext(ysWindow);
-	if(ysContext==NULL){
-		fprintf(stderr,"Cannot create OpenGL context.\n");
+	ysRender = SDL_CreateRenderer(
+		ysWindow,
+		-1,
+		SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC
+	);
+	if(ysRender==NULL){
+		fprintf(stderr,"Cannot Open Renderer.\n");
 		exit(1);
 	}
-	printf("Created OpenGL context.\n");
-
-	// These lines are needed, or window will not appear >>
-	glClearColor(1.0F,1.0F,1.0F,0.0F);
-	glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-	glFlush();
-	// glXSwapBuffers(ysXDsp,ysXWnd);
-	// These lines are needed, or window will not appear <<
-
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LEQUAL);
-	glShadeModel(GL_SMOOTH);
-
-	GLfloat dif[]={0.8F,0.8F,0.8F,1.0F};
-	GLfloat amb[]={0.4F,0.4F,0.4F,1.0F};
-	GLfloat spc[]={0.9F,0.9F,0.9F,1.0F};
-	GLfloat shininess[]={50.0,50.0,50.0,0.0};
-
-	glEnable(GL_LIGHTING);
-	glEnable(GL_LIGHT0);
-	glLightfv(GL_LIGHT0,GL_DIFFUSE,dif);
-	glLightfv(GL_LIGHT0,GL_SPECULAR,spc);
-	glMaterialfv(GL_FRONT|GL_BACK,GL_SHININESS,shininess);
-
-	glLightModelfv(GL_LIGHT_MODEL_AMBIENT,amb);
-	glEnable(GL_COLOR_MATERIAL);
-	glEnable(GL_NORMALIZE);
-
-	/*
-	if(0!=tryAlternativeSingleBuffer)
-	{
-		glDrawBuffer(GL_FRONT);
-	}
-	*/
-
-	glClearColor(1.0F,1.0F,1.0F,0.0F);
-	glClearDepth(1.0F);
-	glDisable(GL_DEPTH_TEST);
-
-	glViewport(0,0,sizX,sizY);
-
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glOrtho(0,(float)sizX-1,(float)sizY-1,0,-1,1);
-
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-
-	glShadeModel(GL_FLAT);
-	glPointSize(1);
-	glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-	glColor3ub(0,0,0);
+	printf("Created Renderer.\n");
 
 	if(NULL!=fsOpenGLInitializationCallBack)
 	{
@@ -259,6 +197,10 @@ static void execKeyEvent(SDL_Event ev)
 	ev_key = ev;
 
 	fsKey=FSKEY_NULL;
+
+	printf("key: scancode %s(%d), keysym %s(%x)\n",
+	SDL_GetScancodeName(ev.key.keysym.scancode),ev.key.keysym.scancode,
+	SDL_GetKeyName(ev.key.keysym.sym),ev.key.keysym.sym);
 
 	// SDL_Scancode ev.key.keysym.scancode;
 	// SDL_Keycode ev.key.keysym.sym;
@@ -608,6 +550,8 @@ void FsPushOnPaintEvent(void)
 
 void FsCloseWindow(void)
 {
+	if ( ysRender != nullptr ) SDL_DestroyRenderer( ysRender );
+	if ( ysWindow != nullptr ) SDL_DestroyWindow( ysWindow );
 	SDL_Quit();
 }
 
@@ -740,9 +684,6 @@ int FsGetMouseEvent(int &lb,int &mb,int &rb,int &mx,int &my)
 
 void FsSwapBuffers(void)
 {
-	glFlush();
-	//glXSwapBuffers(ysXDsp,ysXWnd);
-	SDL_GL_SwapWindow(ysWindow);
 }
 
 int FsInkey(void)
